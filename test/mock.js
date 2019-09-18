@@ -14,7 +14,6 @@ test('rejects a table mock that is not an array', t => {
   return t.context.db.connect(sql => sql.selectSeries(8)).catch(e => {
     t.is(e.name, 'Error')
     t.is(e.message, 'mock does not return a table')
-    t.is(e.effect.message, 'incorrect result from mock')
   })
 })
 
@@ -23,7 +22,6 @@ test('rejects a table mock that does not contain rows', t => {
   return t.context.db.connect(sql => sql.selectSeries(8)).catch(e => {
     t.is(e.name, 'Error')
     t.is(e.message, 'mock does not return rows')
-    t.is(e.effect.message, 'incorrect result from mock')
   })
 })
 
@@ -32,7 +30,6 @@ test('rejects a row mock that does not return a row', t => {
   return t.context.db.connect(sql => sql.selectIntegerAndString(8)).catch(e => {
     t.is(e.name, 'Error')
     t.is(e.message, 'mock does not return a row')
-    t.is(e.effect.message, 'incorrect result from mock')
   })
 })
 
@@ -41,7 +38,6 @@ test('rejects a row mock that returns a row with no columns', t => {
   return t.context.db.connect(sql => sql.selectIntegerAndString(8)).catch(e => {
     t.is(e.name, 'Error')
     t.is(e.message, 'mock row should have at least one column')
-    t.is(e.effect.message, 'incorrect result from mock')
   })
 })
 
@@ -61,11 +57,9 @@ test('includes the error name and message in the stack', t => {
     t.is(e.message, 'whiffle')
     t.regex(e.stack, /^Error: whiffle\n/)
 
-    t.is(e.effect.message, 'mock errorWithArguments() threw error')
-    t.regex(e.effect.stack, /^Error: mock errorWithArguments\(\) threw error/)
-    t.deepEqual(e.effect.context.arguments, [42, 21, 96])
-    t.true(e.effect.context.source.endsWith('test/sql/errorWithArguments.sql'))
-    t.is(e.effect.context.return, 'row')
+    t.deepEqual(e.arguments, [42, 21, 96])
+    t.true(e.source.endsWith('test/sql/errorWithArguments.sql'))
+    t.is(e.return, 'row')
   })
 })
 

@@ -37,10 +37,7 @@ test('error has correct information', t => {
       'There is an entry for table "x", but it cannot be referenced from this part of the query.'
     )
 
-    const effect = cause.effect
-    t.is(effect.message, 'query failed')
-    t.deepEqual(effect.context.arguments, [42, 21, 96])
-    t.true(effect.context.source.endsWith('test/sql/errorWithArguments.sql'))
-    t.is(effect.context.return, 'row')
+    t.deepEqual(cause.arguments, [42, 21, 96])
+    t.true(cause.source.endsWith('test/sql/errorWithArguments.sql'))
   })
 })

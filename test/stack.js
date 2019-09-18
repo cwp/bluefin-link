@@ -14,7 +14,7 @@ of the test suite.
 test('pg error', t => {
   const db = new PgLink(dbUrl, sourceDir)
   return db.connect(c => c.semanticError()).catch(e => {
-    t.true(e.effect.stack.includes(`${__filename}:16:28`))
+    t.true(e.stack.includes(`${__filename}:16:28`))
   })
 })
 
@@ -26,6 +26,6 @@ test('mock error', t => {
   const db = new MockLink(dbUrl, sourceDir)
   return db.connect(c => c.semanticError()).catch(e => {
     t.is(e.message, 'whiffle')
-    t.true(e.effect.stack.includes(`${__filename}:27:28`))
+    t.true(e.stack.includes(`${__filename}:27:28`))
   })
 })

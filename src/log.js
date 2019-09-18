@@ -11,16 +11,13 @@ class DebugLog {
   }
 
   fail (msg, cause, ...rest) {
-    const effect = new Error(msg)
-    effect.context = Object.assign({}, this.context, ...rest)
+    Object.assign(cause, this.context, ...rest)
+    for (const p in cause) if (cause[p] === undefined) delete cause[p]
     for (let i = rest.length - 1; i >= 0; i--) {
       const ctx = rest[i]
-      if (ctx.stack) effect.stack = ctx.stack.replace(/(\[object Object\])/, `Error: ${msg}`)
+      if (ctx.stack) cause.stack = ctx.stack.replace('Error: \n', `Error: ${cause.message || msg}\n`)
     }
 
-    let e = cause
-    while ('effect' in e) e = e.effect
-    e.effect = effect
     return cause
   }
 

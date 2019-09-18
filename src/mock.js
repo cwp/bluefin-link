@@ -1,7 +1,5 @@
 'use strict'
 
-const Promise = require('bluebird')
-
 const BaseStrategy = require('./base')
 
 class MockStrategy extends BaseStrategy {
@@ -10,19 +8,17 @@ class MockStrategy extends BaseStrategy {
     this.mocks = mocks
   }
 
-  connect (log) {
+  async withConnection (log, fn) {
     const connectEnd = log.begin('mock.connect.duration')
-    var txnEnd
-    return this.genId()
-      .then(_id => {
-        connectEnd({ host: this.options.host })
-        log.count('mock.connect.retries', 0, { host: this.options.host })
-        txnEnd = log.begin('mock.connection.duration')
-        return { _id, _log: log }
-      })
-      .disposer(() => {
-        txnEnd({ host: this.options.host })
-      })
+    const _id = await this.genId()
+    try {
+      connectEnd({ host: this.options.host })
+      log.count('mock.connect.retries', 0, { host: this.options.host })
+      var txnEnd = log.begin('mock.connection.duration')
+      return fn({ _id, _log: log })
+    } finally {
+      txnEnd({ host: this.options.host })
+    }
   }
 
   createMethod (name, meta, text) {

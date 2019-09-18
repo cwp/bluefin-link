@@ -3,15 +3,14 @@
 const crypto = require('crypto')
 const fs = require('fs')
 const path = require('path')
-const Promise = require('bluebird')
 const parseConnectionString = require('pg-connection-string').parse
+const util = require('util')
+const randomBytes = util.promisify(crypto.randomBytes)
 
 class BaseStrategy {
-  static disconnect () {
-    return Promise.resolve()
-  }
+  static async disconnect() {}
 
-  constructor (_options) {
+  constructor(_options) {
     this.directory = _options.directory
     delete _options.directory
 
@@ -31,19 +30,17 @@ class BaseStrategy {
     this.methods = {
       begin: this.createTxnMethod('begin'),
       commit: this.createTxnMethod('commit'),
-      rollback: this.createTxnMethod('rollback')
+      rollback: this.createTxnMethod('rollback'),
     }
   }
 
-  disconnect () {
-    return Promise.resolve()
-  }
+  async disconnect() {}
 
-  hasMethod (name) {
+  hasMethod(name) {
     return name in this.methods
   }
 
-  create (name) {
+  create(name) {
     var text
     var source
     try {
@@ -53,7 +50,7 @@ class BaseStrategy {
       return undefined
     }
 
-    const meta = { source }
+    const meta = {source}
     this.extractMetaData(text, meta)
 
     const fn = this.createMethod(name, meta, text)
@@ -61,7 +58,7 @@ class BaseStrategy {
     return this.methods[name]
   }
 
-  extractMetaData (text, meta) {
+  extractMetaData(text, meta) {
     const pattern = /^--\*\s+(\w+)\s+(\w+)/g
 
     var match
@@ -72,21 +69,22 @@ class BaseStrategy {
     return meta
   }
 
-  desc (options) {
-    return Object.assign({ url: this.url }, options)
+  desc(options) {
+    return Object.assign({url: this.url}, options)
   }
 
-  genId () {
-    return Promise.fromCallback(cb => crypto.randomBytes(3, cb)).then(buf => buf.toString('hex'))
+  async genId() {
+    const buf = await randomBytes(3)
+    return buf.toString('hex')
   }
 
-  logQuery (target, meta, call, microseconds) {
-    const context = { id: target._id, ms: microseconds / 100 }
+  logQuery(target, meta, call, microseconds) {
+    const context = {id: target._id, ms: microseconds / 100}
     if (meta.source) context.source = target._log.formatPath(meta.source)
     target._log.info('query', meta, call, context)
   }
 
-  addCallsite (log, context) {
+  addCallsite(log, context) {
     if (log.tracer) log.tracer.addCallsite(context, findCaller)
   }
 }
