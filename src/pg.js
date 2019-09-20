@@ -106,6 +106,12 @@ class PgStrategy extends BaseStrategy {
       case 'row':
         fn = r => (r.rows[0] ? Object.assign({}, r.rows[0]) : r.rows[0])
         break
+      case 'column':
+        fn = r => {
+          const name = r.fields[0].name
+          return r.rows.map(ea => ea[name])
+        }
+        break
       case 'table':
         fn = r => r.rows.map(ea => (ea ? Object.assign({}, ea) : ea))
         break

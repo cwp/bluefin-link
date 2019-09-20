@@ -3,30 +3,30 @@
 const BaseStrategy = require('./base')
 
 class MockStrategy extends BaseStrategy {
-  constructor (options, mocks) {
+  constructor(options, mocks) {
     super(options)
     this.mocks = mocks
   }
 
-  async withConnection (log, fn) {
+  async withConnection(log, fn) {
     const connectEnd = log.begin('mock.connect.duration')
     const _id = await this.genId()
     try {
-      connectEnd({ host: this.options.host })
-      log.count('mock.connect.retries', 0, { host: this.options.host })
+      connectEnd({host: this.options.host})
+      log.count('mock.connect.retries', 0, {host: this.options.host})
       var txnEnd = log.begin('mock.connection.duration')
-      return fn({ _id, _log: log })
+      return fn({_id, _log: log})
     } finally {
-      txnEnd({ host: this.options.host })
+      txnEnd({host: this.options.host})
     }
   }
 
-  createMethod (name, meta, text) {
+  createMethod(name, meta, text) {
     const checkResult = this.createCheckResultFn(name, meta)
-    const { addCallsite, logQuery, options, mocks } = this
-    const method = function (...args) {
+    const {addCallsite, logQuery, options, mocks} = this
+    const method = function(...args) {
       const queryEnd = this._log.begin('mock.query.duration')
-      const context = Object.assign({ arguments: args }, meta)
+      const context = Object.assign({arguments: args}, meta)
       addCallsite(this._log, context)
       Error.captureStackTrace(context, method)
 
@@ -40,7 +40,7 @@ class MockStrategy extends BaseStrategy {
       return new Promise((resolve, reject) => {
         process.nextTick(() => {
           let result = mock
-          const microseconds = queryEnd({ host: options.host, query: name })
+          const microseconds = queryEnd({host: options.host, query: name})
           logQuery(this, meta, context, microseconds)
           if (typeof mock === 'function') {
             try {
@@ -57,11 +57,11 @@ class MockStrategy extends BaseStrategy {
     return method
   }
 
-  createCheckResultFn (name, meta) {
-    return function (log, result, context, resolve, reject) {
+  createCheckResultFn(name, meta) {
+    return function(log, result, context, resolve, reject) {
       const fail = msg => {
         const cause = new Error(msg)
-        cause.context = { result }
+        cause.context = {result}
         log.fail('incorrect result from mock', cause, context)
         reject(cause)
       }
@@ -91,6 +91,17 @@ class MockStrategy extends BaseStrategy {
         if (Object.keys(result).length < 1) {
           return fail('mock row should have at least one column')
         }
+      } else if (meta.return === 'column') {
+        // if no rows were returned, undefined is legit
+        if (result === undefined) return resolve(result)
+
+        // null is not a valid value
+        if (result === null) return fail('mock returns null, not a column')
+
+        // if it's some scalar value, that's also wrong
+        if (!Array.isArray(result)) {
+          return fail('mock does not return a column')
+        }
       }
 
       // if we made it here, the mock is fine
@@ -98,9 +109,9 @@ class MockStrategy extends BaseStrategy {
     }
   }
 
-  createTxnMethod (sql) {
-    return function () {
-      this._log.info(sql, { 'connection-id': this._id })
+  createTxnMethod(sql) {
+    return function() {
+      this._log.info(sql, {'connection-id': this._id})
       return new Promise((resolve, reject) => {
         process.nextTick(() => {
           resolve()

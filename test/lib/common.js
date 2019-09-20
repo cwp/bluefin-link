@@ -27,6 +27,12 @@ module.exports = test => {
     t.is(r.str, 'abc')
   })
 
+  test('executes a column function', async t => {
+    t.context.Link.fn.selectColumn = [0, 1, 2, 3]
+    const column = await t.context.db.connect(sql => sql.selectColumn(3))
+    t.deepEqual(column, [0, 1, 2, 3])
+  })
+
   test('executes a table function', async t => {
     t.context.Link.fn.selectSeries = [
       {num: 0},
