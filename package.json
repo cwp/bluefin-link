@@ -9,6 +9,7 @@
     "debug": "~4.1.1",
     "pg": "~7.12.1",
     "pg-connection-string": "~2.1.0",
+    "pg-copy-streams": "~2.2.2",
     "promise-retry": "~1.1.1"
   },
   "devDependencies": {

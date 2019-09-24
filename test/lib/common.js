@@ -1,5 +1,5 @@
 const path = require('path')
-
+const Readable = require('stream').Readable
 const sourceDir = path.join(__dirname, '..', 'sql')
 
 module.exports = test => {
@@ -78,6 +78,59 @@ module.exports = test => {
     t.is(result.rows.length, 9)
     t.true(Array.isArray(result.fields))
     t.is(result.fields.length, 1)
+  })
+
+  test('executes a writestream function', async t => {
+    const expectedTimeSeries = [
+      {day: new Date('2019-01-01T08:00:00.000Z'), value: 1},
+      {day: new Date('2019-01-02T08:00:00.000Z'), value: 2},
+      {day: new Date('2019-01-03T08:00:00.000Z'), value: 3},
+    ]
+
+    t.context.Link.fn.createTsTable = () => {}
+    t.context.Link.fn.copyToTs = fn => {t.is(typeof fn, 'function')}
+    t.context.Link.fn.selectAllTs = expectedTimeSeries
+
+    const rows = await t.context.db.txn(async sql => {
+      await sql.createTsTable()
+      await sql.copyToTs(ws => {
+        ws.write('2019-01-01\t1\n')
+        ws.write('2019-01-02\t2\n')
+        ws.write('2019-01-03\t3\n')
+        ws.end()
+      })
+      return sql.selectAllTs()
+    })
+
+    t.deepEqual(rows, expectedTimeSeries)
+  })
+
+  test('executes a readstream function', async t => {
+    const expectedTsv = '2019-02-01\t11\n2019-02-02\t12\n2019-02-03\t13\n'
+
+    t.context.Link.fn.createTsTable = () => {}
+    t.context.Link.fn.insertTs = () => {}
+    t.context.Link.fn.copyFromTs = fn => {
+      rs = new Readable()
+      rs.push(expectedTsv)
+      rs.push(null)
+      return fn(rs)
+    }
+
+    const str = await t.context.db.txn(async sql => {
+      await sql.createTsTable()
+      await sql.insertTs('2019-02-01', 11)
+      await sql.insertTs('2019-02-02', 12)
+      await sql.insertTs('2019-02-03', 13)
+
+      let tsv = ''
+      await sql.copyFromTs(rs => {
+        rs.on('data', buf => tsv += buf.toString('utf8'))
+      })
+      return tsv
+    })
+
+    t.is(str, expectedTsv)
   })
 
   test('executes queries in parallel', async t => {

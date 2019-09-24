@@ -3,6 +3,9 @@
 const crypto = require('crypto')
 const pg = require('pg')
 const pretry = require('promise-retry')
+const copyStreams = require('pg-copy-streams')
+const copyFrom = copyStreams.from
+const copyTo = copyStreams.to
 
 const BaseStrategy = require('./base')
 
@@ -94,6 +97,9 @@ class PgStrategy extends BaseStrategy {
   }
 
   createMethod(name, meta, text) {
+    if (meta.return === 'writestream') return this.createStreamMethod(name, meta, text, copyFrom)
+    if (meta.return === 'readstream') return this.createStreamMethod(name, meta, text, copyTo)
+
     var fn
     switch (meta.return) {
       case 'value':
@@ -122,6 +128,41 @@ class PgStrategy extends BaseStrategy {
         throw new Error('Unrecognized return kind', meta.return)
     }
     return this.createMethodWithCallback(name, meta, text, fn)
+  }
+
+  createStreamMethod(name, meta, text, wrap) {
+    const {addCallsite, logQuery, options} = this
+
+    const method = async function (...args) {
+      if (args.length < 1) throw new Error('Stream queries require a callback function')
+      const fn = args[args.length - 1]
+      if (typeof fn !== 'function') throw new Error('The last argument must be a function')
+      args = args.slice(0, -1)
+
+      const queryEnd = this._log.begin('pg.query.duration')
+      args = args.map(format)
+      const context = Object.assign({arguments: args}, meta)
+      addCallsite(this._log, context)
+      Error.captureStackTrace(context, method)
+
+      try {
+        const result = await new Promise((resolve, reject) => {
+          const stream = this._client.query(wrap(text), args)
+          stream.on('error', reject)
+          stream.on('end', resolve)
+          return fn(stream)
+        })
+
+        const microseconds = queryEnd({host: options.host, query: name})
+        logQuery(this, meta, context, microseconds)
+        return result
+      } catch (opErr) {
+        const cause = rebuildError(opErr)
+        throw this._log.fail('query failed', cause, context)
+      }
+    }
+
+    return method
   }
 
   createMethodWithCallback(name, meta, text, extract) {
