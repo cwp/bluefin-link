@@ -1,8 +1,8 @@
 const fs = require('fs')
 const path = require('path')
 const pg = require('pg')
+const {Jot} = require('bluefin-jot')
 
-const DebugLog = require('./log')
 const MockStrategy = require('./mock.js')
 const PgStrategy = require('./pg.js')
 
@@ -72,7 +72,7 @@ class Link {
   }
 }
 
-Link.log = new DebugLog()
+Link.log = new Jot()
 
 class PgLink extends Link {
   static mock() {

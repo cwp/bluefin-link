@@ -25,7 +25,7 @@ test('mock error', t => {
   }
   const db = new MockLink(dbUrl, sourceDir)
   return db.connect(c => c.semanticError()).catch(e => {
-    t.is(e.message, 'whiffle')
+    t.true(e.cause.stack.includes(`${__filename}:24:11`))
     t.true(e.stack.includes(`${__filename}:27:28`))
   })
 })

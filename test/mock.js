@@ -11,33 +11,29 @@ common(test)
 
 test('rejects a table mock that is not an array', t => {
   t.context.Link.fn.selectSeries = 42
-  return t.context.db.connect(sql => sql.selectSeries(8)).catch(e => {
-    t.is(e.name, 'Error')
-    t.is(e.message, 'mock does not return a table')
+  return t.context.db.connect(sql => sql.selectSeries(8)).catch(error => {
+    t.is(error.message, 'mock does not return a table')
   })
 })
 
 test('rejects a table mock that does not contain rows', t => {
   t.context.Link.fn.selectSeries = [42]
-  return t.context.db.connect(sql => sql.selectSeries(8)).catch(e => {
-    t.is(e.name, 'Error')
-    t.is(e.message, 'mock does not return rows')
+  return t.context.db.connect(sql => sql.selectSeries(8)).catch(error => {
+    t.is(error.message, 'mock does not return rows')
   })
 })
 
 test('rejects a row mock that does not return a row', t => {
   t.context.Link.fn.selectIntegerAndString = 42
-  return t.context.db.connect(sql => sql.selectIntegerAndString(8)).catch(e => {
-    t.is(e.name, 'Error')
-    t.is(e.message, 'mock does not return a row')
+  return t.context.db.connect(sql => sql.selectIntegerAndString(8)).catch(error => {
+    t.is(error.message, 'mock does not return a row')
   })
 })
 
 test('rejects a row mock that returns a row with no columns', t => {
   t.context.Link.fn.selectIntegerAndString = {}
-  return t.context.db.connect(sql => sql.selectIntegerAndString(8)).catch(e => {
-    t.is(e.name, 'Error')
-    t.is(e.message, 'mock row should have at least one column')
+  return t.context.db.connect(sql => sql.selectIntegerAndString(8)).catch(error => {
+    t.is(error.message, 'mock row should have at least one column')
   })
 })
 
@@ -53,13 +49,14 @@ test('includes the error name and message in the stack', t => {
   Link.fn.errorWithArguments = () => {
     throw new Error('whiffle')
   }
-  return db.connect(sql => sql.errorWithArguments(42, 21, 96)).catch(e => {
-    t.is(e.message, 'whiffle')
-    t.regex(e.stack, /^Error: whiffle\n/)
+  return db.connect(sql => sql.errorWithArguments(42, 21, 96)).catch(effect => {
+    const {cause} = effect
+    t.is(cause.message, 'whiffle')
+    t.regex(cause.stack, /^Error: whiffle\n/)
 
-    t.deepEqual(e.arguments, [42, 21, 96])
-    t.true(e.source.endsWith('test/sql/errorWithArguments.sql'))
-    t.is(e.return, 'row')
+    t.deepEqual(effect.arguments, [42, 21, 96])
+    t.true(effect.source.endsWith('test/sql/errorWithArguments.sql'))
+    t.is(effect.return, 'row')
   })
 })
 

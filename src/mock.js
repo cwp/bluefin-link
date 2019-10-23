@@ -24,11 +24,12 @@ class MockStrategy extends BaseStrategy {
   createMethod(name, meta, text) {
     const checkResult = this.createCheckResultFn(name, meta)
     const {addCallsite, logQuery, options, mocks} = this
+
     const method = function(...args) {
       const queryEnd = this._log.begin('mock.query.duration')
       const context = Object.assign({arguments: args}, meta)
-      addCallsite(this._log, context)
       Error.captureStackTrace(context, method)
+      addCallsite(this._log, context)
 
       // make sure we have a mock for this query
       if (!(name in mocks)) {
@@ -40,14 +41,14 @@ class MockStrategy extends BaseStrategy {
       return new Promise((resolve, reject) => {
         process.nextTick(() => {
           let result = mock
-          const microseconds = queryEnd({host: options.host, query: name})
-          logQuery(this, meta, context, microseconds)
+          const ms = queryEnd({host: options.host, query: name})
+          logQuery(this, meta, context, ms)
           if (typeof mock === 'function') {
             try {
               result = mock.apply(this, args)
-            } catch (e) {
-              this._log.fail(`mock ${name}() threw error`, e, context)
-              return reject(e)
+            } catch (cause) {
+              const effect = wrap(`mock ${name}() threw error`, cause, context)
+              return reject(effect)
             }
           }
           checkResult(this._log, result, context, resolve, reject)
@@ -60,10 +61,8 @@ class MockStrategy extends BaseStrategy {
   createCheckResultFn(name, meta) {
     return function(log, result, context, resolve, reject) {
       const fail = msg => {
-        const cause = new Error(msg)
-        cause.context = {result}
-        log.fail('incorrect result from mock', cause, context)
-        reject(cause)
+        const error = wrap(msg, undefined, context, {result})
+        reject(error)
       }
 
       if (meta.return === 'table') {
@@ -122,3 +121,11 @@ class MockStrategy extends BaseStrategy {
 }
 
 module.exports = MockStrategy
+
+const wrap = (message, cause, context, ...rest) => {
+  const effect = new Error(message)
+  Object.assign(effect, context, ...rest)
+  if ('stack' in context) effect.stack = context.stack.replace(/Error:?\s*\n/, `Error: ${message}\n`)
+  Object.defineProperty(effect, 'cause', {value: cause, enumerable: false})
+  return effect
+}

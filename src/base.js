@@ -78,8 +78,8 @@ class BaseStrategy {
     return buf.toString('hex')
   }
 
-  logQuery(target, meta, call, microseconds) {
-    const context = {id: target._id, ms: microseconds / 100}
+  logQuery(target, meta, call, milliseconds) {
+    const context = {id: target._id, ms: milliseconds}
     if (meta.source) context.source = target._log.formatPath(meta.source)
     target._log.info('query', meta, call, context)
   }

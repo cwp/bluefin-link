@@ -29,11 +29,11 @@ common(test)
 test('error has correct information', t => {
   return db.connect(c => c.errorWithArguments(42, 21, 96)).catch(cause => {
     t.is(cause.message, 'invalid reference to FROM-clause entry for table "x"')
-    t.is(cause.context.length, 217)
-    t.is(cause.context.code, '42P01')
-    t.is(cause.context.position, 120)
+    t.is(cause.length, 217)
+    t.is(cause.code, '42P01')
+    t.is(cause.position, 120)
     t.is(
-      cause.context.hint,
+      cause.hint,
       'There is an entry for table "x", but it cannot be referenced from this part of the query.'
     )
 

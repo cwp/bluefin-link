@@ -67,20 +67,19 @@ class PgStrategy extends BaseStrategy {
       })
     }).catch(err => {
       const context = Object.assign(retryOpts, {attempts: failures.length, messages: failures})
-      context.ms = connectEnd(info()) * 1e-3
-      log.fail('Failed to connect to database', err, context)
-      throw err
+      context.ms = connectEnd(info())
+      throw log.fail('Failed to connect to database', err, context)
     })
 
     const [_id, _client] = await Promise.all([idvow, cvow])
     try {
-      const ms = connectEnd(dimensions) * 1e-3
+      const ms = connectEnd(dimensions)
       log.debug('connected', info(_id, ms))
       log.count('pg.connect.retries', failures.length, dimensions)
       txnEnd = log.begin('pg.connection.duration')
       var result = await fn({_id, _client, _log: log})
     } finally {
-      const ms = txnEnd(dimensions) * 1e-3
+      const ms = txnEnd(dimensions)
       _client.release()
       log.debug('disconnected', info(_id, ms))
     }
@@ -153,12 +152,11 @@ class PgStrategy extends BaseStrategy {
           return fn(stream)
         })
 
-        const microseconds = queryEnd({host: options.host, query: name})
-        logQuery(this, meta, context, microseconds)
+        const ms = queryEnd({host: options.host, query: name})
+        logQuery(this, meta, context, ms)
         return result
-      } catch (opErr) {
-        const cause = rebuildError(opErr)
-        throw this._log.fail('query failed', cause, context)
+      } catch (cause) {
+        throw rebuildError(cause, context)
       }
     }
 
@@ -177,12 +175,11 @@ class PgStrategy extends BaseStrategy {
 
       try {
         const result = await this._client.query(text, args)
-        const microseconds = queryEnd({host: options.host, query: name})
-        logQuery(this, meta, context, microseconds)
+        const ms = queryEnd({host: options.host, query: name})
+        logQuery(this, meta, context, ms)
         return extract(result)
-      } catch (opErr) {
-        const cause = rebuildError(opErr)
-        throw this._log.fail('query failed', cause, context)
+      } catch (cause) {
+        throw rebuildError(cause, context)
       }
     }
 
@@ -195,8 +192,8 @@ class PgStrategy extends BaseStrategy {
       this._log.info(sql, context)
       try {
         return this._client.query(sql)
-      } catch (err) {
-        throw rebuildError(err)
+      } catch (cause) {
+        throw rebuildError(cause, context)
       }
     }
   }
@@ -212,18 +209,25 @@ function format(v) {
   else return v
 }
 
-function rebuildError(pge) {
-  const error = new Error(pge.message)
-  error.stack = pge.stack.replace('error: ', 'Error: ')
-  error.context = {}
-  for (let p in pge) {
+function rebuildError(cause, context) {
+  const error = new Error(cause.message)
+  error.stack = context.stack.replace('Error\n', `Error: ${cause.message}`)
+
+  for (let p in cause) {
     if (ignoreProperties.includes(p)) continue
-    if (pge[p] === undefined) continue
+    if (cause[p] === undefined) continue
     if (p === 'position') {
-      error.context[p] = parseInt(pge[p])
+      error[p] = parseInt(cause[p])
     } else {
-      error.context[p] = pge[p]
+      error[p] = cause[p]
     }
   }
+
+  for (let p in context) {
+    if (p !== 'stack') {
+      error[p] = context[p]
+    }
+  }
+
   return error
 }

@@ -13,7 +13,6 @@ const options = {
 test('connect rejects when connection fails', async t => {
   const db = new PgLink(options, __dirname, 'sql')
   const err = await t.throwsAsync(() => db.connect(sql => {}))
-
   t.true(typeof err.message === 'string')
   t.is(err.attempts, 3)
   t.is(err.messages.length, 3)
