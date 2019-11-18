@@ -16,13 +16,6 @@ const checkLinkArgs = (options, segments, cb) => {
 }
 
 class Link {
-  static parseInt8AsJsNumber() {
-    // this can lead to numerical errors for values greater than 2^32, because
-    // JavaScript will use floats, which are not exact. However, int8 is the
-    // type returned by COUNT(), which pg will return as a string by default.
-    pg.types.setTypeParser(20, parseInt)
-  }
-
   static disconnect() {
     return PgStrategy.disconnect()
   }

@@ -32,9 +32,11 @@ class PgStrategy extends BaseStrategy {
     const key = this.poolKey
     if (key in pools) return pools[key]
 
-    const poolOpts = Object.assign({connectionTimeoutMillis: 30000}, this.options)
+    const defaults = {connectionTimeoutMillis: 30000}
+    const poolOpts = Object.assign(defaults, this.options)
     const p = new pg.Pool(poolOpts)
     p.on('error', e => log.error(e))
+    p.on('connect', c => c.setTypeParser(pg.types.builtins.INT8, BigInt))
     pools[key] = p
 
     return p
@@ -132,7 +134,7 @@ class PgStrategy extends BaseStrategy {
   createStreamMethod(name, meta, text, wrap) {
     const {addCallsite, logQuery, options} = this
 
-    const method = async function (...args) {
+    const method = async function(...args) {
       if (args.length < 1) throw new Error('Stream queries require a callback function')
       const fn = args[args.length - 1]
       if (typeof fn !== 'function') throw new Error('The last argument must be a function')

@@ -8,8 +8,6 @@ const Link = require('../src')
 const dbUrl = 'pg:///test'
 const db = new Link(dbUrl, __dirname, 'sql')
 
-let int8Parser
-
 class Custom {
   constructor (buf) {
     this.buf = buf
@@ -20,13 +18,10 @@ class Custom {
   }
 }
 
-test('materializes counts as int', t => {
-  int8Parser = pg.types.getTypeParser(20)
-  Link.parseInt8AsJsNumber()
+test('materializes counts as BigInt', t => {
   return db
     .connect(sql => sql.selectCount())
-    .then(val => t.is(val, 1))
-    .then(() => pg.types.setTypeParser(20, int8Parser))
+    .then(val => t.is(val, 1n))
 })
 
 test('serializes Buffers correctly', t => {
