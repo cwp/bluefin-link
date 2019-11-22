@@ -88,12 +88,16 @@ module.exports = test => {
     ]
 
     t.context.Link.fn.createTsTable = () => {}
-    t.context.Link.fn.copyToTs = fn => {t.is(typeof fn, 'function')}
+    t.context.Link.fn.copyToTs = fn => {
+      t.is(typeof fn, 'function')
+      return 3
+    }
     t.context.Link.fn.selectAllTs = expectedTimeSeries
 
+    let rowCount
     const rows = await t.context.db.txn(async sql => {
       await sql.createTsTable()
-      await sql.copyToTs(ws => {
+      rowCount = await sql.copyToTs(ws => {
         ws.write('2019-01-01\t1\n')
         ws.write('2019-01-02\t2\n')
         ws.write('2019-01-03\t3\n')
@@ -102,6 +106,7 @@ module.exports = test => {
       return sql.selectAllTs()
     })
 
+    t.is(rowCount, 3)
     t.deepEqual(rows, expectedTimeSeries)
   })
 
@@ -114,9 +119,11 @@ module.exports = test => {
       rs = new Readable()
       rs.push(expectedTsv)
       rs.push(null)
-      return fn(rs)
+      fn(rs)
+      return 3
     }
 
+    let rowCount
     const str = await t.context.db.txn(async sql => {
       await sql.createTsTable()
       await sql.insertTs('2019-02-01', 11)
@@ -124,12 +131,13 @@ module.exports = test => {
       await sql.insertTs('2019-02-03', 13)
 
       let tsv = ''
-      await sql.copyFromTs(rs => {
-        rs.on('data', buf => tsv += buf.toString('utf8'))
+      rowCount = await sql.copyFromTs(rs => {
+        rs.on('data', buf => (tsv += buf.toString('utf8')))
       })
       return tsv
     })
 
+    t.is(rowCount, 3)
     t.is(str, expectedTsv)
   })
 

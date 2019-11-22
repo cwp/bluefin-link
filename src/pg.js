@@ -150,7 +150,7 @@ class PgStrategy extends BaseStrategy {
         const result = await new Promise((resolve, reject) => {
           const stream = this._client.query(wrap(text), args)
           stream.on('error', reject)
-          stream.on('end', resolve)
+          stream.on('end', () => resolve(stream.rowCount))
           return fn(stream)
         })
 

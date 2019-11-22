@@ -1,6 +1,5 @@
 const fs = require('fs')
 const path = require('path')
-const pg = require('pg')
 const {Jot} = require('bluefin-jot')
 
 const MockStrategy = require('./mock.js')
