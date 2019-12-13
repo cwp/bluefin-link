@@ -8,28 +8,28 @@ class MockStrategy extends BaseStrategy {
     this.mocks = mocks
   }
 
-  async withConnection(log, fn) {
-    const connectEnd = log.begin('mock.connect.duration')
-    const _id = await this.genId()
+  async withConnection(jot, fn) {
+    const connecting = jot.start('mock.connect', {host: this.options.host})
     try {
-      connectEnd({host: this.options.host})
-      log.count('mock.connect.retries', 0, {host: this.options.host})
-      var txnEnd = log.begin('mock.connection.duration')
-      return fn({_id, _log: log})
+      const _id = await this.genId()
+      connecting.count('mock.connect.retries', 0)
+      connecting.finish()
+      var connected = jot.start('mock.connection', {host: this.options.host})
+      return fn({_id, _log: connected})
     } finally {
-      txnEnd({host: this.options.host})
+      connected.finish()
     }
   }
 
   createMethod(name, meta, text) {
     const checkResult = this.createCheckResultFn(name, meta)
-    const {addCallsite, logQuery, options, mocks} = this
+    const {options, mocks} = this
 
     const method = function(...args) {
-      const queryEnd = this._log.begin('mock.query.duration')
-      const context = Object.assign({arguments: args}, meta)
+      const context = {arguments: args, host: options.host, query: name}
+      Object.assign(context, meta)
+      const querying = this._log.start('mock.query', context)
       Error.captureStackTrace(context, method)
-      addCallsite(this._log, context)
 
       // make sure we have a mock for this query
       if (!(name in mocks)) {
@@ -41,8 +41,7 @@ class MockStrategy extends BaseStrategy {
       return new Promise((resolve, reject) => {
         process.nextTick(() => {
           let result = mock
-          const ms = queryEnd({host: options.host, query: name})
-          logQuery(this, meta, context, ms)
+          querying.finish()
           if (typeof mock === 'function') {
             try {
               result = mock.apply(this, args)

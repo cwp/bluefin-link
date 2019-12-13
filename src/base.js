@@ -77,16 +77,6 @@ class BaseStrategy {
     const buf = await randomBytes(3)
     return buf.toString('hex')
   }
-
-  logQuery(target, meta, call, milliseconds) {
-    const context = {id: target._id, ms: milliseconds}
-    if (meta.source) context.source = target._log.formatPath(meta.source)
-    target._log.info('query', meta, call, context)
-  }
-
-  addCallsite(log, context) {
-    if (log.tracer) log.tracer.addCallsite(context, findCaller)
-  }
 }
 
 const findCaller = stack => {

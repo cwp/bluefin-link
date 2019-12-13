@@ -1,56 +1,64 @@
 const test = require('ava')
 const PgLink = require('../src')
-const StubLog = require('./lib/log')
+const sinon = require('sinon')
+const {Jot, DebugTarget} = require('bluefin-jot')
 
-test('mock sends query metrics to a custom log', async t => {
-  const log = new StubLog()
+const m = sinon.match
+
+
+test.beforeEach(t => {
+  const target = new DebugTarget()
+  t.context.jot = new Jot(target)
+  t.context.spy = sinon.spy(target, 'finish')
+})
+
+test('mock sends query spans to a custom log', async t => {
+  const {jot, spy} = t.context
   const Link = PgLink.mock()
   Link.fn.selectInteger = 42
-  Link.log = log
   const db = new Link('pg:///test', __dirname, 'sql')
+  db.log = jot
 
   await db.connect(sql => sql.selectInteger(1))
 
-  t.is(log.metrics.length, 4)
-  for (let o of log.metrics) {
-    t.is(o.dimensions.host, 'localhost')
-  }
-
-  t.is(log.metrics[0].name, 'mock.connect.duration')
-  t.is(log.metrics[0].kind, 'magnitude')
-
-  t.is(log.metrics[1].name, 'mock.connect.retries')
-  t.is(log.metrics[1].kind, 'count')
-
-  t.is(log.metrics[2].name, 'mock.connection.duration')
-  t.is(log.metrics[2].kind, 'magnitude')
-
-  t.is(log.metrics[3].name, 'mock.query.duration')
-  t.is(log.metrics[3].kind, 'magnitude')
-  t.is(log.metrics[3].dimensions.query, 'selectInteger')
+  t.is(spy.callCount, 3)
+  t.true(spy.calledWith(m({name: 'mock.connect', duration: m.number}), m({host: 'localhost'})))
+  t.true(spy.calledWith(m({name: 'mock.connection', duration: m.number}), m({host: 'localhost'})))
+  t.true(
+    spy.calledWith(
+      m({name: 'mock.query', duration: m.number}),
+      m({
+        host: 'localhost',
+        arguments: [1],
+        query: 'selectInteger',
+        source: `${db.directory}/selectInteger.sql`,
+        return: 'value',
+      }),
+    ),
+  )
 })
 
 test('pg sends query metrics to a custom log', async t => {
-  const log = new StubLog()
-  PgLink.log = log
+  const {jot, spy} = t.context
   const db = new PgLink('pg:///test', __dirname, 'sql')
+  db.log = jot
 
   await db.connect(sql => sql.selectInteger(1))
-  t.is(log.metrics.length, 4)
-  for (let o of log.metrics) {
-    t.is(o.dimensions.host, 'localhost')
-  }
 
-  t.is(log.metrics[0].name, 'pg.connect.duration')
-  t.is(log.metrics[0].kind, 'magnitude')
+  t.is(spy.callCount, 3)
+  t.true(spy.calledWith(m({name: 'pg.connect', duration: m.number}), m({host: 'localhost'})))
+  t.true(spy.calledWith(m({name: 'pg.connection', duration: m.number}), m({host: 'localhost'})))
+  t.true(
+    spy.calledWith(
+      m({name: 'pg.query', duration: m.number}),
+      m({
+        host: 'localhost',
+        arguments: [1],
+        query: 'selectInteger',
+        source: `${db.directory}/selectInteger.sql`,
+        return: 'value',
+      }),
+    ),
+  )
 
-  t.is(log.metrics[1].name, 'pg.connect.retries')
-  t.is(log.metrics[1].kind, 'count')
-
-  t.is(log.metrics[2].name, 'pg.query.duration')
-  t.is(log.metrics[2].kind, 'magnitude')
-  t.is(log.metrics[2].dimensions.query, 'selectInteger')
-
-  t.is(log.metrics[3].name, 'pg.connection.duration')
-  t.is(log.metrics[2].kind, 'magnitude')
 })

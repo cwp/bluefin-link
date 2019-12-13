@@ -43,47 +43,42 @@ class PgStrategy extends BaseStrategy {
   }
 
   async withConnection(log, fn) {
-    var txnEnd
+    var connected
     var failures = []
 
     const idvow = this.genId()
     const pool = this.getPool(log)
-    const dimensions = {host: this.options.host}
-    const context = {}
-    this.addCallsite(log, context)
-    const info = (id, ms) => {
-      const info = {clients: pool.totalCount, idle: pool.idleCount, waiting: pool.waitingCount}
-      if (id !== undefined) info['connection-id'] = id
-      if (ms !== undefined) info.ms = ms
-      return Object.assign(info, context, dimensions)
-    }
-
-    const connectEnd = log.begin('pg.connect.duration')
+    const connecting = log.start('pg.connect', {
+      clients: pool.totalCount,
+      idle: pool.idleCount,
+      waiting: pool.waitingCount,
+      host: this.options.host,
+    })
 
     const retryOpts = Object.assign({randomize: true, maxTimeout: 8000}, this.options)
-    const cvow = pretry(retryOpts, retry => {
-      log.debug('connecting', info())
+    const cvow = pretry(retryOpts, (retry, number) => {
+      connecting.debug('connecting', {number})
       return pool.connect().catch(err => {
         failures.push(err.message)
         retry(err)
       })
-    }).catch(err => {
+    }).catch(cause => {
       const context = Object.assign(retryOpts, {attempts: failures.length, messages: failures})
-      context.ms = connectEnd(info())
-      throw log.fail('Failed to connect to database', err, context)
+      connecting.finish(context)
+      throw connecting.fail('Failed to connect to database', cause, context)
     })
 
     const [_id, _client] = await Promise.all([idvow, cvow])
     try {
-      const ms = connectEnd(dimensions)
-      log.debug('connected', info(_id, ms))
-      log.count('pg.connect.retries', failures.length, dimensions)
-      txnEnd = log.begin('pg.connection.duration')
+      connecting.debug('connected')
+      connecting.count('pg.connect.retries', failures.length)
+      connecting.finish()
+      connected = log.start('pg.connection', {host: this.options.host})
       var result = await fn({_id, _client, _log: log})
     } finally {
-      const ms = txnEnd(dimensions)
       _client.release()
-      log.debug('disconnected', info(_id, ms))
+      connected.debug('disconnected')
+      connected.finish()
     }
 
     return result
@@ -132,7 +127,7 @@ class PgStrategy extends BaseStrategy {
   }
 
   createStreamMethod(name, meta, text, wrap) {
-    const {addCallsite, logQuery, options} = this
+    const {options} = this
 
     const method = async function(...args) {
       if (args.length < 1) throw new Error('Stream queries require a callback function')
@@ -140,11 +135,10 @@ class PgStrategy extends BaseStrategy {
       if (typeof fn !== 'function') throw new Error('The last argument must be a function')
       args = args.slice(0, -1)
 
-      const queryEnd = this._log.begin('pg.query.duration')
       args = args.map(format)
-      const context = Object.assign({arguments: args}, meta)
-      addCallsite(this._log, context)
+      const context = {arguments: args, host: options.host, query: name}
       Error.captureStackTrace(context, method)
+      const querying = this._log.start('pg.query', context, meta)
 
       try {
         const result = await new Promise((resolve, reject) => {
@@ -154,11 +148,10 @@ class PgStrategy extends BaseStrategy {
           return fn(stream)
         })
 
-        const ms = queryEnd({host: options.host, query: name})
-        logQuery(this, meta, context, ms)
+        querying.finish()
         return result
       } catch (cause) {
-        throw rebuildError(cause, context)
+        throw rebuildError(cause, context, meta)
       }
     }
 
@@ -166,22 +159,24 @@ class PgStrategy extends BaseStrategy {
   }
 
   createMethodWithCallback(name, meta, text, extract) {
-    const {addCallsite, logQuery, options} = this
+    const {options} = this
 
     const method = async function(...args) {
-      const queryEnd = this._log.begin('pg.query.duration')
       args = args.map(format)
-      const context = Object.assign({arguments: args}, meta)
-      addCallsite(this._log, context)
+      const context = {
+        arguments: args,
+        host: options.host,
+        query: name,
+      }
+      const querying = this._log.start('pg.query', meta, context)
       Error.captureStackTrace(context, method)
 
       try {
         const result = await this._client.query(text, args)
-        const ms = queryEnd({host: options.host, query: name})
-        logQuery(this, meta, context, ms)
+        querying.finish()
         return extract(result)
       } catch (cause) {
-        throw rebuildError(cause, context)
+        throw rebuildError(cause, context, meta)
       }
     }
 
@@ -189,11 +184,14 @@ class PgStrategy extends BaseStrategy {
   }
 
   createTxnMethod(sql) {
+    const context = {query: sql}
+
     return async function() {
-      const context = {'connection-id': this._id, callsite: undefined}
-      this._log.info(sql, context)
+      const querying = this._log.start('pg.query', context)
       try {
-        return this._client.query(sql)
+        const result = this._client.query(sql)
+        querying.finish()
+        return result
       } catch (cause) {
         throw rebuildError(cause, context)
       }
@@ -211,7 +209,7 @@ function format(v) {
   else return v
 }
 
-function rebuildError(cause, context) {
+function rebuildError(cause, context, ...rest) {
   const error = new Error(cause.message)
   error.stack = context.stack.replace('Error\n', `Error: ${cause.message}`)
 
@@ -225,11 +223,16 @@ function rebuildError(cause, context) {
     }
   }
 
-  for (let p in context) {
-    if (p !== 'stack') {
-      error[p] = context[p]
-    }
-  }
+  copyProps(context, error)
+  for (const obj of rest) copyProps(obj, error)
 
   return error
+}
+
+function copyProps(context, error) {
+  for (let p in context) {
+    if (p !== 'stack') {
+      error[p] = context[p];
+    }
+  }
 }
