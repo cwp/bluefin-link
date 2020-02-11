@@ -124,7 +124,8 @@ module.exports = MockStrategy
 const wrap = (message, cause, context, ...rest) => {
   const effect = new Error(message)
   Object.assign(effect, context, ...rest)
-  if ('stack' in context) effect.stack = context.stack.replace(/Error:?\s*\n/, `Error: ${message}\n`)
+  if ('stack' in context)
+    effect.stack = context.stack.replace(/Error:?\s*\n/, `Error: ${message}\n`)
   Object.defineProperty(effect, 'cause', {value: cause, enumerable: false})
   return effect
 }

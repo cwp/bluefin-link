@@ -141,6 +141,126 @@ module.exports = test => {
     t.is(str, expectedTsv)
   })
 
+  test('executes a dynamic value function', async t => {
+    const query = {sql: 'select $1::int', return: 'value', args: [3]}
+    t.context.Link.fn.$selectInteger = 3
+    const i = await t.context.db.connect(sql => sql.$selectInteger(query))
+    t.is(i, 3)
+  })
+
+  test('executes a dynamic row function', async t => {
+    const query = {sql: 'select $1::int as number', return: 'row', args: [3]}
+    t.context.Link.fn.$selectInteger = {number: 3}
+    const row = await t.context.db.connect(sql => sql.$selectInteger(query))
+    t.deepEqual(row, {number: 3})
+  })
+
+  test('executes a dynamic table function', async t => {
+    const query = {sql: 'select * from generate_series(0, $1) AS num', return: 'table', args: [3]}
+
+    t.context.Link.fn.$selectSeries = [
+      {num: 0},
+      {num: 1},
+      {num: 2},
+      {num: 3},
+    ]
+
+    const rows = await t.context.db.connect(sql => sql.$selectSeries(query))
+    t.true(Array.isArray(rows))
+    t.is(rows.length, 4)
+    for (let i = 0; i < 4; i++) {
+      t.is(rows[i].num, i)
+    }
+   })
+
+   test('executes a dynamic result function', async t => {
+    t.context.Link.fn.$selectResult = {
+      command: 'SELECT',
+      rowCount: 3,
+      rows: [
+        {num: 0},
+        {num: 1},
+        {num: 2},
+      ],
+      fields: [{name: 'num'}],
+    }
+
+    const query = {sql: 'select * from generate_series(0, $1) AS num', args: [2]}
+    const result = await t.context.db.connect(sql => sql.$selectResult(query))
+
+    t.is(result.command, 'SELECT')
+    t.is(result.rowCount, 3)
+    t.true(Array.isArray(result.rows))
+    t.is(result.rows.length, 3)
+    t.true(Array.isArray(result.fields))
+    t.is(result.fields.length, 1)
+  })
+
+  test('executes a dynamic writestream function', async t => {
+    const expectedTimeSeries = [
+      {day: new Date('2019-01-01T08:00:00.000Z'), value: 1},
+      {day: new Date('2019-01-02T08:00:00.000Z'), value: 2},
+      {day: new Date('2019-01-03T08:00:00.000Z'), value: 3},
+    ]
+
+    t.context.Link.fn.createTsTable = () => {}
+    t.context.Link.fn.$copyToTs = fn => {
+      t.is(typeof fn, 'function')
+      return 3
+    }
+    t.context.Link.fn.selectAllTs = expectedTimeSeries
+
+    const writeFn = ws => {
+      ws.write('2019-01-01\t1\n')
+      ws.write('2019-01-02\t2\n')
+      ws.write('2019-01-03\t3\n')
+      ws.end()
+    }
+    const query = {sql: 'copy timeseries(day, value) from stdin', args: [writeFn], return: 'writestream'}
+
+    let rowCount
+    const rows = await t.context.db.txn(async sql => {
+      await sql.createTsTable()
+      rowCount = await sql.$copyToTs(query)
+      return sql.selectAllTs()
+    })
+
+    t.is(rowCount, 3)
+    t.deepEqual(rows, expectedTimeSeries)
+  })
+
+  test('executes a dynamic readstream function', async t => {
+    const expectedTsv = '2019-02-01\t11\n2019-02-02\t12\n2019-02-03\t13\n'
+
+    t.context.Link.fn.createTsTable = () => {}
+    t.context.Link.fn.insertTs = () => {}
+    t.context.Link.fn.$copyFromTs = fn => {
+      rs = new Readable()
+      rs.push(expectedTsv)
+      rs.push(null)
+      fn(rs)
+      return 3
+    }
+
+    let tsv = ''
+    const readFn = rs => rs.on('data', buf => (tsv += buf.toString('utf8')))
+    const query = {sql: 'copy timeseries(day, value) to stdout', return: 'readstream', args: [readFn]}
+
+    let rowCount
+    const str = await t.context.db.txn(async sql => {
+      await sql.createTsTable()
+      await sql.insertTs('2019-02-01', 11)
+      await sql.insertTs('2019-02-02', 12)
+      await sql.insertTs('2019-02-03', 13)
+
+      rowCount = await sql.$copyFromTs(query)
+      return tsv
+    })
+
+    t.is(rowCount, 3)
+    t.is(str, expectedTsv)
+  })
+
   test('executes queries in parallel', async t => {
     t.context.Link.fn.selectInteger = 3
 

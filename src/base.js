@@ -41,11 +41,11 @@ class BaseStrategy {
   }
 
   create(name) {
-    var text
-    var source
+    if (name.startsWith('$')) return this.createDynamicMethod(name)
+
     try {
-      source = path.join(this.directory, name + '.sql')
-      text = fs.readFileSync(source, 'utf8')
+      var source = path.join(this.directory, name + '.sql')
+      var text = fs.readFileSync(source, 'utf8')
     } catch (e) {
       return undefined
     }
@@ -55,8 +55,21 @@ class BaseStrategy {
 
     const fn = this.createMethod(name, meta, text)
     this.methods[name] = fn
-    return this.methods[name]
+    return fn
   }
+
+  createDynamicMethod(name) {
+    const self = this
+
+    const method = function(query) {
+      const {sql, args, ...meta} = query
+      const inner = self.createMethod(name, meta, sql)
+      return inner.apply(this, args)
+    }
+
+    return method
+  }
+
 
   extractMetaData(text, meta) {
     const pattern = /^--\*\s+(\w+)\s+(\w+)/g
