@@ -49,9 +49,14 @@ class Link {
     return Promise.all(results)
   }
 
-  txn(fn) {
+  txn(mode, fn) {
+    if (fn === undefined) {
+      fn = mode
+      mode = undefined
+    }
+
     return this.connect(async sql => {
-      await sql.begin()
+      await sql.begin(mode)
       try {
         var result = await fn(sql)
         await sql.commit()
@@ -62,6 +67,11 @@ class Link {
       return result
     })
   }
+
+  serialize(fn) {
+    return this.txn('isolation level serializable', fn)
+  }
+
 }
 
 Link.log = new Jot()

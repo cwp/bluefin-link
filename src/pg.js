@@ -183,11 +183,12 @@ class PgStrategy extends BaseStrategy {
     return method
   }
 
-  createTxnMethod(sql) {
-    const context = {query: sql}
+  createTxnMethod(command) {
+    const context = {query: command}
 
-    return async function() {
+    return async function(details) {
       const querying = this._log.start('pg.query', context)
+      const sql = details ? `${command} ${details}` : command
       try {
         const result = this._client.query(sql)
         querying.finish()

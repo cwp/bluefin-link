@@ -82,9 +82,9 @@ module.exports = test => {
 
   test('executes a writestream function', async t => {
     const expectedTimeSeries = [
-      {day: new Date('2019-01-01T08:00:00.000Z'), value: 1},
-      {day: new Date('2019-01-02T08:00:00.000Z'), value: 2},
-      {day: new Date('2019-01-03T08:00:00.000Z'), value: 3},
+      {day: new Date(2019, 0, 1), value: 1},
+      {day: new Date(2019, 0, 2), value: 2},
+      {day: new Date(2019, 0, 3), value: 3},
     ]
 
     t.context.Link.fn.createTsTable = () => {}
@@ -158,12 +158,7 @@ module.exports = test => {
   test('executes a dynamic table function', async t => {
     const query = {sql: 'select * from generate_series(0, $1) AS num', return: 'table', args: [3]}
 
-    t.context.Link.fn.$selectSeries = [
-      {num: 0},
-      {num: 1},
-      {num: 2},
-      {num: 3},
-    ]
+    t.context.Link.fn.$selectSeries = [{num: 0}, {num: 1}, {num: 2}, {num: 3}]
 
     const rows = await t.context.db.connect(sql => sql.$selectSeries(query))
     t.true(Array.isArray(rows))
@@ -171,17 +166,13 @@ module.exports = test => {
     for (let i = 0; i < 4; i++) {
       t.is(rows[i].num, i)
     }
-   })
+  })
 
-   test('executes a dynamic result function', async t => {
+  test('executes a dynamic result function', async t => {
     t.context.Link.fn.$selectResult = {
       command: 'SELECT',
       rowCount: 3,
-      rows: [
-        {num: 0},
-        {num: 1},
-        {num: 2},
-      ],
+      rows: [{num: 0}, {num: 1}, {num: 2}],
       fields: [{name: 'num'}],
     }
 
@@ -198,9 +189,9 @@ module.exports = test => {
 
   test('executes a dynamic writestream function', async t => {
     const expectedTimeSeries = [
-      {day: new Date('2019-01-01T08:00:00.000Z'), value: 1},
-      {day: new Date('2019-01-02T08:00:00.000Z'), value: 2},
-      {day: new Date('2019-01-03T08:00:00.000Z'), value: 3},
+      {day: new Date(2019, 0, 1), value: 1},
+      {day: new Date(2019, 0, 2), value: 2},
+      {day: new Date(2019, 0, 3), value: 3},
     ]
 
     t.context.Link.fn.createTsTable = () => {}
@@ -216,7 +207,11 @@ module.exports = test => {
       ws.write('2019-01-03\t3\n')
       ws.end()
     }
-    const query = {sql: 'copy timeseries(day, value) from stdin', args: [writeFn], return: 'writestream'}
+    const query = {
+      sql: 'copy timeseries(day, value) from stdin',
+      args: [writeFn],
+      return: 'writestream',
+    }
 
     let rowCount
     const rows = await t.context.db.txn(async sql => {
@@ -244,7 +239,11 @@ module.exports = test => {
 
     let tsv = ''
     const readFn = rs => rs.on('data', buf => (tsv += buf.toString('utf8')))
-    const query = {sql: 'copy timeseries(day, value) to stdout', return: 'readstream', args: [readFn]}
+    const query = {
+      sql: 'copy timeseries(day, value) to stdout',
+      return: 'readstream',
+      args: [readFn],
+    }
 
     let rowCount
     const str = await t.context.db.txn(async sql => {
@@ -320,5 +319,27 @@ module.exports = test => {
       t.is(e.return, 'row')
       t.true(e.source.includes(`${sourceDir}/errorWithArguments.sql`))
     }
+  })
+
+  test('executes queries in a transaction with specific characteristics', async t => {
+    const {Link, db} = t.context
+    Link.fn.insertN = () => {
+      throw new Error('transaction is read-only')
+    }
+
+    try {
+      await db.txn('read only', async one => one.insertN(42))
+      t.fail('the query should fail, because the transaction is read only')
+    } catch (e) {
+      t.is(e.query, 'insertN')
+    }
+  })
+
+  test('executes queries in a serializable transaction', async t => {
+    const {Link, db} = t.context
+    Link.fn.selectInteger = () => (4)
+
+    const sum = await db.serialize(sql => sql.selectInteger(4))
+    t.true(typeof sum === 'number')
   })
 }
